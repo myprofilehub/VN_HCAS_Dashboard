@@ -1,0 +1,286 @@
+
+<h2 class="sr-only">AEBAS Attendance Dashboard — real-time view of student attendance across two batches</h2>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.shell{padding:1rem 0}
+.tabs{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap}
+.tab{padding:7px 18px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;font-size:14px;font-weight:400;transition:all .15s}
+.tab.active{background:var(--color-background-secondary);color:var(--color-text-primary);border-color:var(--color-border-primary);font-weight:500}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:1.25rem}
+.metric{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:.9rem 1rem}
+.metric-label{font-size:12px;color:var(--color-text-secondary);margin-bottom:4px}
+.metric-value{font-size:22px;font-weight:500;color:var(--color-text-primary)}
+.metric-value.green{color:#1D9E75}
+.metric-value.red{color:#E24B4A}
+.metric-value.blue{color:#378ADD}
+.section-title{font-size:13px;font-weight:500;color:var(--color-text-secondary);margin-bottom:.6rem;letter-spacing:.03em}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem}
+.chart-box{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem}
+.chart-title{font-size:13px;color:var(--color-text-secondary);margin-bottom:.75rem}
+.table-box{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem;margin-bottom:1.25rem;overflow-x:auto}
+.filters{display:flex;gap:10px;align-items:center;margin-bottom:.75rem;flex-wrap:wrap}
+.filters select,.filters input{font-size:13px;padding:5px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:7px 10px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);white-space:nowrap;font-size:12px}
+td{padding:7px 10px;border-bottom:0.5px solid var(--color-border-tertiary);color:var(--color-text-primary);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+.badge-p{background:#EAF3DE;color:#3B6D11}
+.badge-a{background:#FCEBEB;color:#A32D2D}
+.badge-d{background:#E1F5EE;color:#0F6E56}
+.pct-bar{display:flex;align-items:center;gap:8px}
+.pct-track{flex:1;height:6px;background:var(--color-background-secondary);border-radius:3px;overflow:hidden}
+.pct-fill{height:100%;border-radius:3px;transition:width .3s}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--color-text-secondary);flex-wrap:wrap;margin-bottom:.5rem}
+.legend span{display:flex;align-items:center;gap:5px}
+.dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+@media(max-width:600px){.charts-row{grid-template-columns:1fr}}
+</style>
+
+<div class="shell">
+
+<div class="tabs" id="tabs">
+  <button class="tab active" onclick="switchSheet(0)">Hindustan</button>
+  <button class="tab" onclick="switchSheet(1)">SKWC</button>
+</div>
+
+<div id="metrics" class="metrics"></div>
+
+<div class="charts-row">
+  <div class="chart-box">
+    <div class="chart-title">Attendance per date</div>
+    <div class="legend">
+      <span><span class="dot" style="background:#1D9E75"></span>Present</span>
+      <span><span class="dot" style="background:#E24B4A"></span>Absent</span>
+    </div>
+    <div style="position:relative;height:200px"><canvas id="dateChart" role="img" aria-label="Daily attendance bar chart"></canvas></div>
+  </div>
+  <div class="chart-box">
+    <div class="chart-title">Attendance rate distribution</div>
+    <div class="legend">
+      <span><span class="dot" style="background:#1D9E75"></span>≥75%</span>
+      <span><span class="dot" style="background:#EF9F27"></span>50–74%</span>
+      <span><span class="dot" style="background:#E24B4A"></span>&lt;50%</span>
+    </div>
+    <div style="position:relative;height:200px"><canvas id="distChart" role="img" aria-label="Attendance distribution pie chart"></canvas></div>
+  </div>
+</div>
+
+<div class="table-box">
+  <div class="filters">
+    <input type="text" id="searchBox" placeholder="Search name…" oninput="renderTable()" style="width:180px">
+    <select id="filterAtt" onchange="renderTable()">
+      <option value="all">All students</option>
+      <option value="good">≥75% attendance</option>
+      <option value="avg">50–74%</option>
+      <option value="low">Below 50%</option>
+    </select>
+    <select id="sortBy" onchange="renderTable()">
+      <option value="name">Sort: name</option>
+      <option value="pct_desc">Sort: attendance ↓</option>
+      <option value="pct_asc">Sort: attendance ↑</option>
+    </select>
+  </div>
+  <div id="tableWrap"></div>
+</div>
+
+<div style="font-size:12px;color:var(--color-text-secondary)">Upload an updated Excel file — the dashboard will reparse and reflect changes instantly.</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const RAW = {
+  "Hindustan": {
+    dates: ["23 Mar","24 Mar","25 Mar","26 Mar","27 Mar","28 Mar","30 Mar","31 Mar","1 Apr","2 Apr","10 Apr","11 Apr","13 Apr"],
+    students: [
+      {name:"Madhan D",att:["P","P","P","P","P","A","P","P","A","P","A","A","P"],present:8,absent:3,total:11},
+      {name:"Gopika V",att:["P","P","A","P","P","A","A","A","A","A","P","A","A"],present:5,absent:6,total:11},
+      {name:"Janaki",att:["P","P","P","P","P","A","P","A","A","A","A","A","A"],present:6,absent:5,total:11},
+      {name:"Sena Mohammed",att:["A","P","P","P","P","P","P","P","A","P","P","P","P"],present:9,absent:1,total:11},
+      {name:"R Vicky",att:["P","P","P","P","P","P","P","P","A","P","P","P","P"],present:10,absent:1,total:11},
+      {name:"Manish D",att:["P","P","P","P","P","A","A","P","A","A","A","A","A"],present:6,absent:5,total:11},
+      {name:"Ganapathyraj P",att:["P","P","P","P","P","A","A","P","A","P","P","P","P"],present:8,absent:3,total:11},
+      {name:"Priyanka R",att:["P","A","A","A","A","A","A","A","A","A","A","A","A"],present:1,absent:10,total:11},
+      {name:"Mannoj",att:["P","P","P","P","P","A","P","A","A","A","A","A","A"],present:6,absent:5,total:11},
+      {name:"Preethi Varsha A",att:["P","P","P","P","P","P","A","P","A","P","A","P","P"],present:8,absent:3,total:11},
+      {name:"Ajai C",att:["P","P","P","P","P","A","P","A","A","A","A","A","A"],present:6,absent:5,total:11},
+      {name:"Mohammed Arzath",att:["P","P","P","P","A","A","A","A","A","A","A","A","A"],present:4,absent:7,total:11},
+      {name:"Charukesh K",att:["P","A","P","A","A","A","A","A","A","A","A","A","A"],present:2,absent:9,total:11},
+      {name:"Naveen Babu R",att:["P","P","P","P","P","P","P","A","P","A","P","P","A"],present:9,absent:2,total:11},
+      {name:"Deepankumar A",att:["P","P","P","A","A","A","P","A","P","P","A","A","A"],present:6,absent:5,total:11},
+      {name:"Pooja S",att:["P","P","P","P","P","A","P","A","A","A","A","A","A"],present:6,absent:5,total:11},
+      {name:"Naveen Kumar",att:["P","P","P","A","P","P","P","P","A","P","A","A","P"],present:8,absent:3,total:11},
+      {name:"Yuvaraj",att:["P","P","P","P","A","A","P","A","A","A","P","P","P"],present:6,absent:5,total:11},
+      {name:"Thivagar S",att:["P","P","P","P","P","P","P","P","A","P","P","P","P"],present:10,absent:1,total:11},
+      {name:"Kokilavani V",att:["P","P","P","P","P","A","P","A","P","P","P","A","A"],present:9,absent:2,total:11},
+      {name:"Lavanya M",att:["P","P","P","P","P","A","P","A","P","P","P","A","A"],present:9,absent:2,total:11},
+      {name:"S Preethi",att:["P","P","P","A","A","A","P","A","A","A","P","A","A"],present:5,absent:6,total:11},
+      {name:"Karthik raja G",att:["P","P","P","P","P","A","P","A","P","A","A","A","A"],present:7,absent:4,total:11},
+      {name:"Keerthika",att:["P","P","P","P","P","A","P","A","P","P","P","A","A"],present:9,absent:2,total:11},
+      {name:"Prasanth",att:["P","P","P","P","P","A","A","P","A","A","A","A","A"],present:6,absent:5,total:11},
+      {name:"Aboorva S",att:["P","P","P","P","A","A","A","A","A","A","P","A","A"],present:5,absent:6,total:11},
+      {name:"Prakash R",att:["P","P","P","P","P","P","A","P","A","P","P","A","P"],present:9,absent:2,total:11},
+      {name:"Subash K",att:["P","P","P","P","P","P","P","A","A","A","P","P","A"],present:8,absent:3,total:11},
+      {name:"Deepak R",att:["P","P","P","P","P","A","P","A","A","A","A","A","A"],present:6,absent:5,total:11},
+      {name:"Ganesan G",att:["P","P","P","P","P","P","P","P","A","P","P","P","P"],present:10,absent:1,total:11},
+    ]
+  },
+  "SKWC": {
+    dates:["27 Mar","28 Mar","1 Apr","4 Apr","6 Apr","10 Apr","13 Apr"],
+    students:[
+      {name:"Shireesha",att:["A","A","A","A","A","A","A"],present:0,absent:6,total:6},
+      {name:"Sabitha",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"R Ranjini",att:["P","P","A","P","P","P","P"],present:5,absent:1,total:6},
+      {name:"Aarthi R",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Sathiya priya P",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Preethi M",att:["P","P","P","A","P","P","P"],present:5,absent:1,total:6},
+      {name:"Dhanusree M",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Nithya Shree",att:["P","A","P","P","A","P","P"],present:4,absent:2,total:6},
+      {name:"Swetha S",att:["P","A","P","P","P","P","P"],present:5,absent:1,total:6},
+      {name:"Anusha P",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Preethi D",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Thilagavathi M",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Mariya therasa A",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Vasmitha G",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Devadharshini K",att:["P","P","P","P","P","P","P"],present:6,absent:0,total:6},
+      {name:"Sandhya M",att:["-","-","P","P","P","P","P"],present:4,absent:0,total:4},
+    ]
+  }
+};
+
+let currentSheet = 0;
+let dateChart = null;
+let distChart = null;
+const sheetNames = ["Hindustan","SKWC"];
+
+function getPct(s){ return s.total > 0 ? s.present/s.total : 0; }
+function pctColor(p){ return p>=0.75?'#1D9E75':p>=0.5?'#EF9F27':'#E24B4A'; }
+
+function renderMetrics(data){
+  const el = document.getElementById('metrics');
+  const students = data.students;
+  const avgPct = students.reduce((a,s)=>a+getPct(s),0)/students.length;
+  const good = students.filter(s=>getPct(s)>=0.75).length;
+  const low = students.filter(s=>getPct(s)<0.5).length;
+  const totalDays = data.dates.length;
+  el.innerHTML=`
+    <div class="metric"><div class="metric-label">Total students</div><div class="metric-value blue">${students.length}</div></div>
+    <div class="metric"><div class="metric-label">Class days</div><div class="metric-value blue">${totalDays}</div></div>
+    <div class="metric"><div class="metric-label">Avg attendance</div><div class="metric-value" style="color:${pctColor(avgPct)}">${Math.round(avgPct*100)}%</div></div>
+    <div class="metric"><div class="metric-label">≥75% students</div><div class="metric-value green">${good}</div></div>
+    <div class="metric"><div class="metric-label">Below 50%</div><div class="metric-value red">${low}</div></div>
+  `;
+}
+
+function renderDateChart(data){
+  const ctx = document.getElementById('dateChart');
+  if(dateChart){dateChart.destroy();dateChart=null;}
+  const presentCounts = data.dates.map((_,di)=>
+    data.students.filter(s=>s.att[di]==='P'||s.att[di]==='p').length
+  );
+  const absentCounts = data.dates.map((_,di)=>
+    data.students.filter(s=>s.att[di]==='A'||s.att[di]==='a').length
+  );
+  dateChart = new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:data.dates,
+      datasets:[
+        {label:'Present',data:presentCounts,backgroundColor:'#1D9E75',borderRadius:3},
+        {label:'Absent',data:absentCounts,backgroundColor:'#E24B4A',borderRadius:3}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{font:{size:10},maxRotation:45,autoSkip:false},grid:{display:false}},
+        y:{ticks:{stepSize:1,font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}}
+      }
+    }
+  });
+}
+
+function renderDistChart(data){
+  const ctx = document.getElementById('distChart');
+  if(distChart){distChart.destroy();distChart=null;}
+  const good = data.students.filter(s=>getPct(s)>=0.75).length;
+  const avg  = data.students.filter(s=>getPct(s)>=0.5&&getPct(s)<0.75).length;
+  const low  = data.students.filter(s=>getPct(s)<0.5).length;
+  distChart = new Chart(ctx,{
+    type:'doughnut',
+    data:{
+      labels:['≥75%','50–74%','<50%'],
+      datasets:[{data:[good,avg,low],backgroundColor:['#1D9E75','#EF9F27','#E24B4A'],borderWidth:0}]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      cutout:'65%',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${c.raw} students`}}}
+    }
+  });
+}
+
+function renderTable(){
+  const data = RAW[sheetNames[currentSheet]];
+  const search = document.getElementById('searchBox').value.toLowerCase();
+  const filter = document.getElementById('filterAtt').value;
+  const sort   = document.getElementById('sortBy').value;
+
+  let students = data.students.filter(s=>{
+    if(search && !s.name.toLowerCase().includes(search)) return false;
+    const p = getPct(s);
+    if(filter==='good' && p<0.75) return false;
+    if(filter==='avg'  && (p<0.5||p>=0.75)) return false;
+    if(filter==='low'  && p>=0.5) return false;
+    return true;
+  });
+
+  if(sort==='pct_desc') students.sort((a,b)=>getPct(b)-getPct(a));
+  else if(sort==='pct_asc') students.sort((a,b)=>getPct(a)-getPct(b));
+  else students.sort((a,b)=>a.name.localeCompare(b.name));
+
+  const dates = data.dates;
+  let html=`<table><thead><tr><th>#</th><th>Name</th>`;
+  dates.forEach(d=>{ html+=`<th>${d}</th>`; });
+  html+=`<th>Present</th><th>Absent</th><th>Attendance</th></tr></thead><tbody>`;
+
+  students.forEach((s,i)=>{
+    const p = getPct(s);
+    const pct = Math.round(p*100);
+    const color = pctColor(p);
+    html+=`<tr><td style="color:var(--color-text-secondary)">${i+1}</td><td style="font-weight:500">${s.name}</td>`;
+    s.att.forEach(a=>{
+      const v = (a==='P'||a==='p') ? 'P' : (a==='A'||a==='a') ? 'A' : a;
+      const cls = v==='P'?'badge-p':v==='A'?'badge-a':'badge-d';
+      html+=`<td><span class="badge ${cls}">${v}</span></td>`;
+    });
+    html+=`<td style="color:#1D9E75;font-weight:500">${s.present}</td>`;
+    html+=`<td style="color:#E24B4A;font-weight:500">${s.absent}</td>`;
+    html+=`<td><div class="pct-bar"><div class="pct-track"><div class="pct-fill" style="width:${pct}%;background:${color}"></div></div><span style="font-size:12px;min-width:36px;font-weight:500;color:${color}">${pct}%</span></div></td>`;
+    html+=`</tr>`;
+  });
+
+  if(!students.length) html+=`<tr><td colspan="${4+dates.length}" style="text-align:center;color:var(--color-text-secondary);padding:1.5rem">No students match this filter.</td></tr>`;
+  html+=`</tbody></table>`;
+  document.getElementById('tableWrap').innerHTML=html;
+}
+
+function switchSheet(idx){
+  currentSheet=idx;
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  document.getElementById('searchBox').value='';
+  document.getElementById('filterAtt').value='all';
+  document.getElementById('sortBy').value='name';
+  const data=RAW[sheetNames[idx]];
+  renderMetrics(data);
+  renderDateChart(data);
+  renderDistChart(data);
+  renderTable();
+}
+
+switchSheet(0);
+</script>
