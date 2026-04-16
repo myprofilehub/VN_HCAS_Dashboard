@@ -2,20 +2,16 @@
 AEBAS Attendance Dashboard - Streamlit App
 Fetches data directly from Zoho Sheets published link.
 Auto-refreshes every 30 seconds to reflect Zoho sheet changes.
-Usage: streamlit run aebas_dashboard.py
+Usage: streamlit run app.py
 """
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import os
 import io
 import requests
-from pathlib import Path
 from datetime import datetime
-import time
+from streamlit_autorefresh import st_autorefresh
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 ZOHO_PUBLISHED_URL = "https://sheet.zohopublic.in/sheet/published/wue3rc6a91885551b45f9be4d618515f94991?download=xlsx"
@@ -27,8 +23,12 @@ st.set_page_config(
     page_title="AEBAS Attendance Dashboard",
     page_icon="📋",
     layout="wide",
-    initial_sidebar_state="collapsed", # Changed to collapsed as sidebar is removed
+    initial_sidebar_state="collapsed",
 )
+
+# ─── AUTO-REFRESH (DEPLOYMENT FRIENDLY) ────────────────────────────────────────
+# This handles the 30-second refresh without blocking the server thread
+st_autorefresh(interval=REFRESH_SECONDS * 1000, key="datarefresh")
 
 # ─── STYLES ────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -171,42 +171,6 @@ def stats_row_html(cards: list) -> str:
         </div>"""
     return f'<div class="stats-row">{items}</div>'
 
-# ─── MAIN APP ──────────────────────────────────────────────────────────────────
-def main():
-    # ── Header ──────────────────────────────────────────────────────────────────
-    st.markdown("## 📋 AEBAS Attendance Dashboard")
-
-    # ── Load data from Zoho ─────────────────────────────────────────────────────
-    with st.spinner("Fetching latest data from Zoho Sheets…"):
-        try:
-            data = load_data_from_zoho(ZOHO_PUBLISHED_URL)
-        except Exception as e:
-            st.error(f"❌ Error fetching data: {e}")
-            st.stop()
-
-    first_sheet = next(iter(data.values()))
-    fetched_at = first_sheet.get("fetched_at", "—")
-    st.markdown(
-        f'<div class="file-info">🌐 Source: <code>Zoho Sheets (live)</code> &nbsp;|&nbsp; '
-        f'Last fetched: <b>{fetched_at}</b> &nbsp;|&nbsp; '
-        f'Auto-refresh: <b>Active ({REFRESH_SECONDS}s)</b></div>',
-        unsafe_allow_html=True
-    )
-
-    # ── Sheet Tabs ──────────────────────────────────────────────────────────────
-    sheet_names = list(data.keys())
-    tabs = st.tabs([f"🏫 {s}" for s in sheet_names])
-
-    for tab, sheet_name in zip(tabs, sheet_names):
-        with tab:
-            render_sheet(data[sheet_name], sheet_name)
-
-    # ── Auto-refresh Logic ──────────────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown(f'<div style="text-align:center; font-size:12px; color:#adb5bd;">Dashboard auto-refreshes every {REFRESH_SECONDS} seconds.</div>', unsafe_allow_html=True)
-    time.sleep(REFRESH_SECONDS)
-    st.rerun()
-
 # ─── PER-SHEET RENDER ──────────────────────────────────────────────────────────
 def render_sheet(sheet_data: dict, sheet_name: str):
     df = sheet_data["df"].copy()
@@ -282,6 +246,36 @@ def render_sheet(sheet_data: dict, sheet_name: str):
 
     display_rows = [{"Name": str(row["Name"]), "Present": int(row.get("No of days present", 0)), "Absent": int(row.get("No of days Absent", 0)), "Attendance %": f"{row.get('Attendance Percentage', 0)*100:.1f}%", "Status": pct_label(row.get('Attendance Percentage', 0)), "Daily": " ".join(f"{'🟢' if str(row.get(dc, '')).upper() == 'P' else ('🔴' if str(row.get(dc, '')).upper() == 'A' else '⬜')}" for dc in date_cols)} for _, row in view_df.iterrows()]
     st.dataframe(pd.DataFrame(display_rows), use_container_width=True, height=400, hide_index=True)
+
+# ─── MAIN APP ──────────────────────────────────────────────────────────────────
+def main():
+    st.markdown("## 📋 AEBAS Attendance Dashboard")
+
+    with st.spinner("Fetching latest data from Zoho Sheets…"):
+        try:
+            data = load_data_from_zoho(ZOHO_PUBLISHED_URL)
+        except Exception as e:
+            st.error(f"❌ Error fetching data: {e}")
+            st.stop()
+
+    first_sheet = next(iter(data.values()))
+    fetched_at = first_sheet.get("fetched_at", "—")
+    st.markdown(
+        f'<div class="file-info">🌐 Source: <code>Zoho Sheets (live)</code> &nbsp;|&nbsp; '
+        f'Last fetched: <b>{fetched_at}</b> &nbsp;|&nbsp; '
+        f'Auto-refresh: <b>Active ({REFRESH_SECONDS}s)</b></div>',
+        unsafe_allow_html=True
+    )
+
+    sheet_names = list(data.keys())
+    tabs = st.tabs([f"🏫 {s}" for s in sheet_names])
+
+    for tab, sheet_name in zip(tabs, sheet_names):
+        with tab:
+            render_sheet(data[sheet_name], sheet_name)
+
+    st.markdown("---")
+    st.markdown(f'<div style="text-align:center; font-size:12px; color:#adb5bd;">Dashboard auto-refreshes every {REFRESH_SECONDS} seconds.</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
