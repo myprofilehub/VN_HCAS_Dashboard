@@ -224,12 +224,12 @@ def render_sheet(sheet_data: dict, sheet_name: str):
             fig.add_bar(x=day_df["Date"], y=day_df["Present"], name="Present", marker_color="#1D9E75")
             fig.add_bar(x=day_df["Date"], y=day_df["Absent"], name="Absent", marker_color="#E24B4A")
             fig.update_layout(title="Daily Attendance Count", barmode="group", height=320, margin=dict(l=0, r=0, t=50, b=0), plot_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
     with chart_col2:
         fig2 = go.Figure(go.Pie(labels=["Good", "Average", "Low"], values=[good_count, (total_students - good_count - low_count), low_count], hole=0.5, marker_colors=["#1D9E75", "#EF9F27", "#E24B4A"]))
         fig2.update_layout(title="Rate Distribution", height=320, margin=dict(l=10, r=10, t=60, b=10))
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
 
     # Filters and Table
     st.markdown("#### 🔍 Student Details")
@@ -245,7 +245,7 @@ def render_sheet(sheet_data: dict, sheet_name: str):
     else: view_df = view_df.sort_values("Name")
 
     display_rows = [{"Name": str(row["Name"]), "Present": int(row.get("No of days present", 0)), "Absent": int(row.get("No of days Absent", 0)), "Attendance %": f"{row.get('Attendance Percentage', 0)*100:.1f}%", "Status": pct_label(row.get('Attendance Percentage', 0)), "Daily": " ".join(f"{'🟢' if str(row.get(dc, '')).upper() == 'P' else ('🔴' if str(row.get(dc, '')).upper() == 'A' else '⬜')}" for dc in date_cols)} for _, row in view_df.iterrows()]
-    st.dataframe(pd.DataFrame(display_rows), use_container_width=True, height=400, hide_index=True)
+    st.dataframe(pd.DataFrame(display_rows), width='stretch', height=400, hide_index=True)
 
 # ─── MAIN APP ──────────────────────────────────────────────────────────────────
 def main():
